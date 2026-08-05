@@ -1,0 +1,12 @@
+{
+  "domain": "haier_smartair2",
+  "name": "Haier SmartAir2",
+  "version": "0.1.0",
+  "codeowners": ["@bwitosze"],
+  "config_flow": true,
+  "documentation": "https://github.com/bwitosze/haier-smartair2",
+  "issue_tracker": "https://github.com/bwitosze/haier-smartair2/issues",
+  "integration_type": "hub",
+  "iot_class": "cloud_push",
+  "requirements": []
+}
