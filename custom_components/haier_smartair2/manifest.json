@@ -1,7 +1,7 @@
 {
   "domain": "haier_smartair2",
   "name": "Haier SmartAir2",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "codeowners": ["@bwitosze"],
   "config_flow": true,
   "documentation": "https://github.com/bwitosze/haier-smartair2",

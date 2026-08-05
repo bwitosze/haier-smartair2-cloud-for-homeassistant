@@ -80,6 +80,8 @@ class Codec:
     poll = POLL_FRAME
     # extra fan-selector entries beyond auto/low/medium/high (device-specific)
     extra_fan_modes: tuple[str, ...] = ()
+    # whether fan-speed control is reliably calibrated for this device generation
+    supports_fan: bool = True
 
     def decode(self, frame: bytes) -> HaierState:  # pragma: no cover - interface
         raise NotImplementedError
@@ -142,17 +144,21 @@ class CodecV2(Codec):
         return build_frame(0x01, b"\x4d\x5f", bytes(blk))
 
 
-# V3 (maks) mode byte encoding is only partially calibrated: 0x25=COOL, 0x85=HEAT.
-_V3_MODE_FROM_RAW = {0x25: MODE_COOL, 0x85: MODE_HEAT}
-_V3_MODE_TO_RAW = {MODE_COOL: 0x25, MODE_HEAT: 0x85}
+# V3 (maks) mode = high nibble of status byte[2] (calibrated 2026-08-05):
+#   0x0=AUTO, 0x2=COOL, 0x4=DRY, 0x8=HEAT, 0xC=FAN. Low nibble = compressor/status noise.
+_V3_MODE_FROM_NIBBLE = {0x0: MODE_AUTO, 0x2: MODE_COOL, 0x4: MODE_DRY, 0x8: MODE_HEAT, 0xC: MODE_FAN}
+_V3_MODE_TO_NIBBLE = {v: k for k, v in _V3_MODE_FROM_NIBBLE.items()}
 
 
 class CodecV3(Codec):
     """Maks-class device (byte layout, 6001 command). Verified via local TCP.
 
-    Only setpoint / power / (cool,heat) mode are firmly calibrated. Fan and
-    current temperature are best-effort and may be refined later.
+    Calibrated: setpoint (byte0), power (byte5 bit0), current temp (byte10/2),
+    mode (byte2 high nibble). Fan speed (byte15) is NOT reliably calibrated yet,
+    so fan control is disabled for this generation to avoid misleading the user.
     """
+
+    supports_fan = False
 
     def decode(self, frame: bytes) -> HaierState:
         _ftype, d = extract_block(frame)
@@ -163,8 +169,7 @@ class CodecV3(Codec):
             current = float(d[10]) / 2.0  # dongle reports room temp in 0.5C steps (x2)
         return HaierState(
             target_temp=float(d[0] + 16),
-            fan=d[1],
-            mode=_V3_MODE_FROM_RAW.get(d[2], MODE_AUTO),
+            mode=_V3_MODE_FROM_NIBBLE.get((d[2] >> 4) & 0x0F, MODE_AUTO),
             power=bool(d[5] & 0x01),
             current_temp=current,
             raw_block=bytes(d),
@@ -175,12 +180,10 @@ class CodecV3(Codec):
         block = bytearray(state.raw_block[:10].ljust(10, b"\x00"))
         if "target_temp" in changes and changes["target_temp"] is not None:
             block[0] = (int(round(changes["target_temp"])) - 16) & 0xFF
-        if "fan" in changes and changes["fan"] is not None:
-            block[1] = int(changes["fan"]) & 0xFF
         if "mode" in changes and changes["mode"] is not None:
-            raw = _V3_MODE_TO_RAW.get(changes["mode"])
-            if raw is not None:
-                block[2] = raw
+            nib = _V3_MODE_TO_NIBBLE.get(changes["mode"])
+            if nib is not None:
+                block[2] = (nib << 4) | (block[2] & 0x0F)  # keep low-nibble status bits
         if "power" in changes and changes["power"] is not None:
             if changes["power"]:
                 block[5] |= 0x01

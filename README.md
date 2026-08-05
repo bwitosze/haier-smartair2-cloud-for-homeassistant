@@ -38,7 +38,7 @@ frame dump — the byte layout can then be calibrated for more models.
 ### HACS (recommended)
 
 1. HACS → three-dot menu → **Custom repositories**
-2. Add `https://github.com/bwitosze/haier-smartair2-cloud-for-homeassistant`, category **Integration**
+2. Add `https://github.com/bwitosze/haier-smartair2`, category **Integration**
 3. Install **Haier SmartAir2**, then restart Home Assistant
 
 ### Manual

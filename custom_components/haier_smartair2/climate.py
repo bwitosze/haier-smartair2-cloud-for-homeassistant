@@ -70,10 +70,8 @@ class HaierClimate(CoordinatorEntity[HaierCoordinator], ClimateEntity):
         HVACMode.DRY,
         HVACMode.FAN_ONLY,
     ]
-    _attr_fan_modes = ["auto", "low", "medium", "high"]
     _attr_supported_features = (
         ClimateEntityFeature.TARGET_TEMPERATURE
-        | ClimateEntityFeature.FAN_MODE
         | ClimateEntityFeature.TURN_ON
         | ClimateEntityFeature.TURN_OFF
     )
@@ -87,16 +85,18 @@ class HaierClimate(CoordinatorEntity[HaierCoordinator], ClimateEntity):
             manufacturer="Haier",
             model="SmartAir2 (cloud)" if coordinator.via_cloud else "SmartAir2 (local)",
         )
-        # fan selector: auto/low/medium/high + any device-specific extras
-        # (quiet/turbo on V2), ordered for a natural quiet->high->turbo layout
-        extras = coordinator.codec.extra_fan_modes
-        modes = ["auto"]
-        if "quiet" in extras:
-            modes.append("quiet")
-        modes += ["low", "medium", "high"]
-        if "turbo" in extras:
-            modes.append("turbo")
-        self._attr_fan_modes = modes
+        # fan selector only when the codec reliably supports fan control
+        # (V2/salon: full; V3/maks: disabled until fan is calibrated locally)
+        if coordinator.codec.supports_fan:
+            extras = coordinator.codec.extra_fan_modes
+            modes = ["auto"]
+            if "quiet" in extras:
+                modes.append("quiet")
+            modes += ["low", "medium", "high"]
+            if "turbo" in extras:
+                modes.append("turbo")
+            self._attr_fan_modes = modes
+            self._attr_supported_features |= ClimateEntityFeature.FAN_MODE
 
     @property
     def available(self) -> bool:
