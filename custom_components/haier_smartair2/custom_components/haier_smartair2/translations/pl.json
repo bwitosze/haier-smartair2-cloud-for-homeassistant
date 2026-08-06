@@ -1,0 +1,51 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Haier SmartAir2",
+        "description": "Zaloguj się kontem SmartAir2 (Haier). Opcjonalnie przypisz urządzenia do lokalnego IP dla sterowania bezpośredniego (format: MAC:IP, po przecinku).",
+        "data": {
+          "username": "E-mail",
+          "password": "Hasło",
+          "region": "Region",
+          "local_ips": "Urządzenia lokalne (MAC:IP, opcjonalnie)"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Błędny e-mail lub hasło",
+      "cannot_connect": "Nie można połączyć z chmurą Haier"
+    },
+    "abort": {
+      "already_configured": "To konto jest już skonfigurowane"
+    }
+  },
+  "selector": {
+    "region": {
+      "options": {
+        "eu": "Europa",
+        "us": "USA",
+        "sg": "Azja (Singapur)"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "room_temperature": {
+        "name": "Temperatura pokojowa"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Haier SmartAir2 — opcje",
+        "description": "Zmień region lub przypisanie urządzeń do lokalnego IP (format: MAC:IP, po przecinku). Puste = sterowanie przez chmurę.",
+        "data": {
+          "region": "Region",
+          "local_ips": "Urządzenia lokalne (MAC:IP)"
+        }
+      }
+    }
+  }
+}
