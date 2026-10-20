@@ -88,9 +88,14 @@ class HaierLocalClient:
             if self.is_online():
                 return
             self._reader, self._writer = await asyncio.open_connection(self._ip, LOCAL_PORT)
-            self._read_task = self._hass.async_create_task(self._read_loop())
+            # Background tasks: HA waits for plain tasks during startup, and these never end.
+            self._read_task = self._hass.async_create_background_task(
+                self._read_loop(), f"haier_smartair2 local read {self._ip}"
+            )
             if self._keepalive_task is None or self._keepalive_task.done():
-                self._keepalive_task = self._hass.async_create_task(self._keepalive_loop())
+                self._keepalive_task = self._hass.async_create_background_task(
+                    self._keepalive_loop(), f"haier_smartair2 local keepalive {self._ip}"
+                )
 
     async def _keepalive_loop(self) -> None:
         """Poll periodically so the dongle keeps the link open and data stays fresh."""
