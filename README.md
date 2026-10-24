@@ -18,8 +18,9 @@ picked per device for whatever works.
 - **Hybrid transport, chosen per device:**
   - **Cloud** — MQTT gateway (`gw-gea-*.haieriot.net`), for encrypted-dongle units
   - **Local** — direct TCP `56800`, for plaintext-dongle units (instant, no internet)
-- Fan selector with `auto / low / medium / high`, plus **quiet** (super-silent) and
-  **turbo** on supported units
+- Fan selector with `auto / low / medium / high`, plus **quiet** (super-silent) on
+  both generations and **turbo** on units that expose it (V2 only so far)
+- Vertical louvre (swing on/off) on V2 units
 - Config UI: e-mail, password, region, and an optional per-device local IP mapping
 - Options flow to change region / local mapping without re-adding
 
@@ -27,18 +28,22 @@ picked per device for whatever works.
 
 | Generation | Example | Transport | Status |
 |---|---|---|---|
-| **V2** (`typeIdentifier` ≤ 32 chars) | wall units w/ encrypted dongle | Cloud | **Full** — target, mode, fan, quiet/turbo, current temp |
-| **V3** (`typeIdentifier` > 32 chars) | older plaintext dongle | Local | **Experimental** — target temp & power confirmed; mode (cool/heat) and fan are best-effort, calibrated on a single unit |
+| **V2** (`typeIdentifier` ≤ 32 chars) | wall units w/ encrypted dongle | Cloud | **Full** — target, mode, fan, quiet/turbo, swing (up/down), current temp |
+| **V3** (`typeIdentifier` > 32 chars) | older plaintext dongle | Local | **Experimental** — target temp, power, mode, fan speed and quiet confirmed against the remote; no turbo on this generation. Calibrated on a single unit |
 
 If your V3 unit reports the wrong mode/fan, please open an issue with a status
 frame dump — the byte layout can then be calibrated for more models.
+
+On V3 the mode and the fan speed share one status byte (high and low nibble of
+`byte[2]`), and quiet is a flag in `byte[5]`. Enabling quiet makes the unit reset
+the speed to auto on its own, so quiet and a fixed speed are mutually exclusive.
 
 ## Installation
 
 ### HACS (recommended)
 
 1. HACS → three-dot menu → **Custom repositories**
-2. Add `https://github.com/bwitosze/haier-smartair2`, category **Integration**
+2. Add `https://github.com/bwitosze/haier-smartair2-cloud-for-homeassistant`, category **Integration**
 3. Install **Haier SmartAir2**, then restart Home Assistant
 
 ### Manual
@@ -78,6 +83,15 @@ the 80-byte LAN envelope over TCP `56800`. No app, no root, no vendor SDK binary
   keeps its cloud link intermittently (some older dongles) is more reliable locally.
 - If a locally-controlled unit flickers to *unavailable*, check that the SmartAir2
   phone app isn't holding the unit's single local connection at the same time.
+
+## Changelog
+
+- **0.1.4** — faster Home Assistant startup: the local read/keep-alive loops and all
+  reconnects run as background tasks, a 10 s timeout on the local TCP connect (an
+  offline unit falls back to cloud instead of stalling setup), and the cloud TLS
+  context no longer loads the CA store inside the event loop
+- **0.1.3** — vertical louvre (swing) on V2 units
+- **0.1.2** — V3 fan speed and quiet mode calibrated against the remote
 
 ## Credits
 

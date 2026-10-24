@@ -18,6 +18,7 @@ _LOGGER = logging.getLogger(__name__)
 
 MARKER_TX = 0x2714
 MARKER_RX = 0x2715
+CONNECT_TIMEOUT = 10  # an offline dongle must not stall HA startup for the OS TCP timeout
 
 
 def _normalise_mac(mac: str) -> str:
@@ -87,10 +88,17 @@ class HaierLocalClient:
         async with self._lock:
             if self.is_online():
                 return
-            self._reader, self._writer = await asyncio.open_connection(self._ip, LOCAL_PORT)
-            self._read_task = self._hass.async_create_task(self._read_loop())
+            self._reader, self._writer = await asyncio.wait_for(
+                asyncio.open_connection(self._ip, LOCAL_PORT), CONNECT_TIMEOUT
+            )
+            # background tasks: HA startup must not wait for these never-ending loops
+            self._read_task = self._hass.async_create_background_task(
+                self._read_loop(), f"haier_local_read_{self._ip}"
+            )
             if self._keepalive_task is None or self._keepalive_task.done():
-                self._keepalive_task = self._hass.async_create_task(self._keepalive_loop())
+                self._keepalive_task = self._hass.async_create_background_task(
+                    self._keepalive_loop(), f"haier_local_keepalive_{self._ip}"
+                )
 
     async def _keepalive_loop(self) -> None:
         """Poll periodically so the dongle keeps the link open and data stays fresh."""
@@ -126,9 +134,12 @@ class HaierLocalClient:
             raise
         finally:
             if not self._stopped:
-                self._hass.loop.call_later(
-                    3, lambda: self._hass.async_create_task(self._reconnect())
-                )
+                self._hass.loop.call_later(3, self._schedule_reconnect)
+
+    def _schedule_reconnect(self) -> None:
+        self._hass.async_create_background_task(
+            self._reconnect(), f"haier_local_reconnect_{self._ip}"
+        )
 
     async def _reconnect(self) -> None:
         if self._stopped or self.is_online():
@@ -137,9 +148,7 @@ class HaierLocalClient:
             await self._connect()
             await self.async_poll("")
         except Exception:  # noqa: BLE001
-            self._hass.loop.call_later(
-                5, lambda: self._hass.async_create_task(self._reconnect())
-            )
+            self._hass.loop.call_later(5, self._schedule_reconnect)
 
     async def _write(self, payload: bytes) -> None:
         if not self.is_online():
