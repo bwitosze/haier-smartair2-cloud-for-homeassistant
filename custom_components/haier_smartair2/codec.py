@@ -212,6 +212,37 @@ V3_VANE_H_POS2 = 0x04
 V3_VANE_H_POS5 = 0x05
 V3_VANE_H_POS6 = 0x06  # right
 
+V3_VANE_V_NAME_TO_RAW = {
+    "auto": V3_VANE_V_AUTO,
+    "top": V3_VANE_V_POS1,
+    "upper": V3_VANE_V_POS2,
+    "lower": V3_VANE_V_POS3,
+    "bottom": V3_VANE_V_POS4,
+    "health_1": V3_VANE_V_HEALTH1,
+    "health_2": V3_VANE_V_HEALTH2,
+}
+V3_VANE_V_RAW_TO_NAME = {raw: name for name, raw in V3_VANE_V_NAME_TO_RAW.items()}
+V3_VANE_H_NAME_TO_RAW = {
+    "auto": V3_VANE_H_AUTO,
+    "center": V3_VANE_H_CENTER,
+    "left": V3_VANE_H_POS1,
+    "left_center": V3_VANE_H_POS2,
+    "right_center": V3_VANE_H_POS5,
+    "right": V3_VANE_H_POS6,
+}
+V3_VANE_H_RAW_TO_NAME = {raw: name for name, raw in V3_VANE_H_NAME_TO_RAW.items()}
+
+
+def vane_v_name(raw: int | None) -> str | None:
+    """Vertical vane name for a raw byte1, or None when the value is unmapped."""
+    return V3_VANE_V_RAW_TO_NAME.get(raw)
+
+
+def vane_h_name(raw: int | None) -> str | None:
+    """Horizontal vane name for a raw byte7, or None when the value is unmapped."""
+    return V3_VANE_H_RAW_TO_NAME.get(raw)
+
+
 _V3_DISPLAY_BIT = 0x02  # status byte[4] bit 1
 _V3_HEAT10_BIT = 0x01  # status byte[4] bit 0
 _V3_HEALTH_BIT = 0x02  # status byte[5] bit 1

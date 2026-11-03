@@ -31,6 +31,12 @@ from .const import (
     MODE_HEAT,
     TEMP_STEP,
 )
+from .codec import (
+    V3_VANE_H_NAME_TO_RAW,
+    V3_VANE_V_NAME_TO_RAW,
+    vane_h_name,
+    vane_v_name,
+)
 from .coordinator import HaierCoordinator
 
 MODE_TO_HVAC = {
@@ -65,6 +71,7 @@ class HaierClimate(CoordinatorEntity[HaierCoordinator], ClimateEntity):
 
     _attr_has_entity_name = True
     _attr_name = None
+    _attr_translation_key = "haier_ac"
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_target_temperature_step = TEMP_STEP
     _attr_min_temp = MIN_TEMP
@@ -112,6 +119,13 @@ class HaierClimate(CoordinatorEntity[HaierCoordinator], ClimateEntity):
         if coordinator.codec.supports_swing:
             self._attr_swing_modes = SWING_BOOL
             self._attr_supported_features |= ClimateEntityFeature.SWING_MODE
+        elif coordinator.v3_extras:
+            self._attr_swing_modes = list(V3_VANE_V_NAME_TO_RAW)
+            self._attr_swing_horizontal_modes = list(V3_VANE_H_NAME_TO_RAW)
+            self._attr_supported_features |= (
+                ClimateEntityFeature.SWING_MODE
+                | ClimateEntityFeature.SWING_HORIZONTAL_MODE
+            )
 
     @property
     def available(self) -> bool:
@@ -148,11 +162,29 @@ class HaierClimate(CoordinatorEntity[HaierCoordinator], ClimateEntity):
     @property
     def swing_mode(self) -> str | None:
         """Up/down louvre (20200I)."""
-        if self.coordinator.data is None or not self.coordinator.codec.supports_swing:
+        if self.coordinator.data is None:
+            return None
+        if self.coordinator.v3_extras:
+            return vane_v_name(self.coordinator.data.vane_v)
+        if not self.coordinator.codec.supports_swing:
             return None
         return SWING_ON if self.coordinator.data.swing_v else SWING_OFF
 
+    @property
+    def swing_horizontal_mode(self) -> str | None:
+        if self.coordinator.data is None or not self.coordinator.v3_extras:
+            return None
+        return vane_h_name(self.coordinator.data.vane_h)
+
+    async def async_set_swing_horizontal_mode(self, swing_horizontal_mode: str) -> None:
+        await self.coordinator.async_apply(
+            vane_h=V3_VANE_H_NAME_TO_RAW[swing_horizontal_mode]
+        )
+
     async def async_set_swing_mode(self, swing_mode: str) -> None:
+        if self.coordinator.v3_extras:
+            await self.coordinator.async_apply(vane_v=V3_VANE_V_NAME_TO_RAW[swing_mode])
+            return
         # deliberately no power=True: moving the louvre should not switch a
         # sleeping unit on, unlike a temperature or mode change
         await self.coordinator.async_apply(swing_v=swing_mode == SWING_ON)

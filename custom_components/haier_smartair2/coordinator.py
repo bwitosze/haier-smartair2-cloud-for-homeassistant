@@ -26,6 +26,7 @@ class HaierCoordinator(DataUpdateCoordinator[HaierState]):
         devid: str,
         name: str,
         via_cloud: bool,
+        v3_extras: bool = False,
     ) -> None:
         super().__init__(
             hass,
@@ -38,6 +39,7 @@ class HaierCoordinator(DataUpdateCoordinator[HaierState]):
         self.devid = devid.upper()
         self.dev_name = name
         self.via_cloud = via_cloud
+        self.v3_extras = v3_extras
         self._last_logged_frame: bytes | None = None
         # push updates from the transport (device-initiated status frames)
         transport.add_listener(self._on_push)

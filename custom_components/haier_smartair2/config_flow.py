@@ -27,6 +27,7 @@ from .const import (
     CONF_PASSWORD,
     CONF_REGION,
     CONF_USERNAME,
+    CONF_V3_EXTRAS,
     DEFAULT_REGION,
     DOMAIN,
     REGIONS,
@@ -112,6 +113,9 @@ class HaierOptionsFlow(OptionsFlow):
                 ),
                 vol.Optional(
                     CONF_LOCAL_IPS, default=current.get(CONF_LOCAL_IPS, "")
+                ): str,
+                vol.Optional(
+                    CONF_V3_EXTRAS, default=current.get(CONF_V3_EXTRAS, "")
                 ): str,
             }
         )

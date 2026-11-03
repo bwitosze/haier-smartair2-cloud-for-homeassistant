@@ -12,6 +12,9 @@ PACKAGE_DIR = Path(__file__).parent.parent / "custom_components" / "haier_smarta
 class _Platform(enum.StrEnum):
     CLIMATE = "climate"
     SENSOR = "sensor"
+    SWITCH = "switch"
+    BUTTON = "button"
+    BINARY_SENSOR = "binary_sensor"
 
 
 # const.py:16 imports Platform from homeassistant.const.
@@ -28,3 +31,4 @@ package.__path__ = [str(PACKAGE_DIR)]
 sys.modules["haier_codec_pkg"] = package
 
 codec = importlib.import_module("haier_codec_pkg.codec")
+const = importlib.import_module("haier_codec_pkg.const")

@@ -34,16 +34,65 @@
       "room_temperature": {
         "name": "Room temperature"
       }
+    },
+    "climate": {
+      "haier_ac": {
+        "state_attributes": {
+          "swing_mode": {
+            "state": {
+              "auto": "Auto",
+              "top": "Top",
+              "upper": "Upper",
+              "lower": "Lower",
+              "bottom": "Bottom",
+              "health_1": "Health 1",
+              "health_2": "Health 2"
+            }
+          },
+          "swing_horizontal_mode": {
+            "state": {
+              "auto": "Auto",
+              "center": "Center",
+              "left": "Left",
+              "left_center": "Left-center",
+              "right_center": "Right-center",
+              "right": "Right"
+            }
+          }
+        }
+      }
+    },
+    "switch": {
+      "health": {
+        "name": "Health"
+      },
+      "display": {
+        "name": "Display"
+      },
+      "heat10": {
+        "name": "10 °C heat"
+      }
+    },
+    "button": {
+      "self_clean": {
+        "name": "Self-clean"
+      }
+    },
+    "binary_sensor": {
+      "self_clean": {
+        "name": "Self-clean"
+      }
     }
   },
   "options": {
     "step": {
       "init": {
         "title": "Haier SmartAir2 options",
-        "description": "Change region or map devices to a local IP (format: MAC:IP, comma-separated). Blank = cloud control.",
+        "description": "Change region or map devices to a local IP (format: MAC:IP, comma-separated). Blank = cloud control. List the MACs of V3 units to turn on extra controls: named vane positions, health, display, 10 °C heat and self-clean.",
         "data": {
           "region": "Region",
-          "local_ips": "Local devices (MAC:IP)"
+          "local_ips": "Local devices (MAC:IP)",
+          "v3_extras": "V3 extra controls (MAC, comma-separated)"
         }
       }
     }
