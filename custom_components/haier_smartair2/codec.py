@@ -39,6 +39,12 @@ class HaierState:
     quiet: bool | None = None  # super-silent: V2 20200P / V3 byte5 bit4
     turbo: bool | None = None  # 20200O powerful/boost (V2 only — absent on V3)
     swing_v: bool | None = None  # 20200I up/down louvre (V2 only)
+    vane_v: int | None = None  # V3 raw byte1, V3_VANE_V_* (V3 only)
+    vane_h: int | None = None  # V3 raw byte7, V3_VANE_H_* (V3 only)
+    health: bool | None = None  # V3 byte5 bit1
+    display: bool | None = None  # V3 byte4 bit1
+    heat10: bool | None = None  # V3 byte4 bit0, 10 °C frost-guard heat
+    self_clean: bool | None = None  # V3 byte9 == 0x10 while self-clean runs
     target_temp: float | None = None
     current_temp: float | None = None
     raw_block: bytes = b""  # the status data block, for read-modify-write
@@ -85,6 +91,8 @@ class Codec:
     supports_fan: bool = True
     # whether louvre (swing) control is calibrated for this device generation
     supports_swing: bool = False
+    # whether the V3 vane positions and health/display/10 °C heat/self-clean exist
+    supports_v3_extras: bool = False
 
     def decode(self, frame: bytes) -> HaierState:  # pragma: no cover - interface
         raise NotImplementedError
@@ -187,6 +195,32 @@ _V3_FAN_TO_NIBBLE = {v: k for k, v in _V3_FAN_FROM_NIBBLE.items()}
 # itself, so quiet and an explicit speed are mutually exclusive on the device.
 _V3_QUIET_BIT = 0x10  # status byte[5] bit 4 (bit 0 of the same byte is power)
 
+# V3 vanes and flags, calibrated 2026-11-03 from an IR-remote capture.
+# Each vane byte is position-addressable: a fixed position has its own value,
+# separate from auto swing.
+V3_VANE_V_AUTO = 0x0C  # byte1: auto swing
+V3_VANE_V_POS1 = 0x02  # top
+V3_VANE_V_POS2 = 0x04
+V3_VANE_V_POS3 = 0x06
+V3_VANE_V_POS4 = 0x08  # bottom
+V3_VANE_V_HEALTH1 = 0x01  # health airflow, variant 1
+V3_VANE_V_HEALTH2 = 0x03  # health airflow, variant 2
+V3_VANE_H_AUTO = 0x07  # byte7: auto swing
+V3_VANE_H_CENTER = 0x00  # remote positions 3 and 4
+V3_VANE_H_POS1 = 0x03  # left
+V3_VANE_H_POS2 = 0x04
+V3_VANE_H_POS5 = 0x05
+V3_VANE_H_POS6 = 0x06  # right
+
+_V3_DISPLAY_BIT = 0x02  # status byte[4] bit 1
+_V3_HEAT10_BIT = 0x01  # status byte[4] bit 0
+_V3_HEALTH_BIT = 0x02  # status byte[5] bit 1
+# byte9 is a mode byte, not a flag: the unit reports 0x10 while self-clean runs
+# and 0x0c while health is on. Echoing a stale 0x10 could restart self-clean, so
+# every command rebuilds it instead of copying it.
+_V3_D9_SELF_CLEAN = 0x10
+_V3_D9_HEALTH = 0x0C
+
 
 class CodecV3(Codec):
     """Maks-class device (byte layout, 6001 command). Verified via local TCP.
@@ -194,9 +228,12 @@ class CodecV3(Codec):
     Calibrated: setpoint (byte0), power (byte5 bit0), current temp (byte10/2),
     mode (byte2 high nibble), fan speed (byte2 low nibble), quiet (byte5 bit4).
     No turbo/boost flag was found on this generation (the remote has no such key).
+    Captured from the IR remote: vanes (byte1, byte7), display and 10 °C heat
+    (byte4), health (byte5 bit1), self-clean (byte9).
     """
 
     extra_fan_modes = ("quiet",)
+    supports_v3_extras = True
 
     def decode(self, frame: bytes) -> HaierState:
         _ftype, d = extract_block(frame)
@@ -211,6 +248,12 @@ class CodecV3(Codec):
             fan=_V3_FAN_FROM_NIBBLE.get(d[2] & 0x0F),
             quiet=bool(d[5] & _V3_QUIET_BIT),
             power=bool(d[5] & 0x01),
+            vane_v=d[1],
+            vane_h=d[7],
+            display=bool(d[4] & _V3_DISPLAY_BIT),
+            heat10=bool(d[4] & _V3_HEAT10_BIT),
+            health=bool(d[5] & _V3_HEALTH_BIT),
+            self_clean=d[9] == _V3_D9_SELF_CLEAN,
             current_temp=current,
             raw_block=bytes(d),
         )
@@ -238,6 +281,26 @@ class CodecV3(Codec):
                 block[5] |= 0x01
             else:
                 block[5] &= ~0x01
+        if "vane_v" in changes and changes["vane_v"] is not None:
+            block[1] = changes["vane_v"] & 0xFF
+        if "vane_h" in changes and changes["vane_h"] is not None:
+            block[7] = changes["vane_h"] & 0xFF
+        for key, idx, bit in (
+            ("display", 4, _V3_DISPLAY_BIT),
+            ("heat10", 4, _V3_HEAT10_BIT),
+            ("health", 5, _V3_HEALTH_BIT),
+        ):
+            if key in changes and changes[key] is not None:
+                if changes[key]:
+                    block[idx] |= bit
+                else:
+                    block[idx] &= ~bit
+        if changes.get("self_clean"):
+            block[9] = _V3_D9_SELF_CLEAN
+        elif block[5] & _V3_HEALTH_BIT:
+            block[9] = _V3_D9_HEALTH
+        else:
+            block[9] = 0x00
         return build_frame(0x01, b"\x60\x01", bytes(block))
 
 

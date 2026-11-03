@@ -5,9 +5,11 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 
+import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers import config_validation as cv
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import ConfigEntryNotReady, ServiceValidationError
 
 from .cloud import CloudAuthError, HaierCloudClient
 from .codec import codec_for_type
@@ -18,6 +20,7 @@ from .const import (
     CONF_REGION,
     CONF_USERNAME,
     DEFAULT_REGION,
+    DOMAIN,
     PLATFORMS,
     REGIONS,
     generate_client_id,
@@ -53,6 +56,22 @@ def _parse_local_map(raw: str | None) -> dict[str, str]:
         if len(mac) == 12 and ip:
             out[mac] = ip
     return out
+
+
+_PROBE_FIELDS = ("vane_v", "vane_h", "display", "heat10", "health", "self_clean")
+
+
+async def _async_probe_set(call: ServiceCall) -> None:
+    """Temporary: send probe writes through the coordinator (removed in Phase 3)."""
+    hass = call.hass
+    devid = "".join(c for c in call.data["mac"] if c.isalnum()).upper()
+    for entry in hass.config_entries.async_loaded_entries(DOMAIN):
+        for coord in entry.runtime_data.coordinators:
+            if coord.devid == devid:
+                changes = {k: call.data[k] for k in _PROBE_FIELDS if k in call.data}
+                await coord.async_apply(**changes)
+                return
+    raise ServiceValidationError(f"No Haier device with MAC {devid} is loaded")
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: HaierConfigEntry) -> None:
@@ -128,6 +147,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: HaierConfigEntry) -> boo
         await coord.async_config_entry_first_refresh()
 
     entry.runtime_data = data
+    if not hass.services.has_service(DOMAIN, "probe_set"):
+        hass.services.async_register(
+            DOMAIN,
+            "probe_set",
+            _async_probe_set,
+            schema=vol.Schema(
+                {
+                    vol.Required("mac"): cv.string,
+                    vol.Optional("vane_v"): vol.All(vol.Coerce(int), vol.Range(min=0, max=255)),
+                    vol.Optional("vane_h"): vol.All(vol.Coerce(int), vol.Range(min=0, max=255)),
+                    vol.Optional("display"): cv.boolean,
+                    vol.Optional("heat10"): cv.boolean,
+                    vol.Optional("health"): cv.boolean,
+                    vol.Optional("self_clean"): cv.boolean,
+                }
+            ),
+        )
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
