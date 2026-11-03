@@ -16,13 +16,20 @@ from __future__ import annotations
 from homeassistant.const import Platform
 
 DOMAIN = "haier_smartair2"
-PLATFORMS = [Platform.CLIMATE, Platform.SENSOR]
+PLATFORMS = [
+    Platform.CLIMATE,
+    Platform.SENSOR,
+    Platform.SWITCH,
+    Platform.BUTTON,
+    Platform.BINARY_SENSOR,
+]
 
 # --- config entry keys ---
 CONF_USERNAME = "username"
 CONF_PASSWORD = "password"
 CONF_REGION = "region"
 CONF_LOCAL_IPS = "local_ips"  # comma-separated IPs to probe for local control
+CONF_V3_EXTRAS = "v3_extras"  # comma-separated MACs that get the V3 vane/switch entities
 CONF_CLIENT_ID = "client_id"  # per-installation gateway client id (generated)
 
 # --- cloud REST (login) ---
@@ -43,6 +50,17 @@ def generate_client_id() -> str:
     import secrets
 
     return secrets.token_hex(16)
+
+
+def parse_mac_list(raw: str | None) -> set[str]:
+    """Parse 'MAC,MAC' -> {normalised MAC}: alphanumeric, uppercase, 12 characters."""
+    out: set[str] = set()
+    for part in (raw or "").split(","):
+        mac = "".join(c for c in part if c.isalnum()).upper()
+        if len(mac) == 12:
+            out.add(mac)
+    return out
+
 
 # --- gateway regions (master-gw domain). Only EU confirmed. ---
 REGIONS = {

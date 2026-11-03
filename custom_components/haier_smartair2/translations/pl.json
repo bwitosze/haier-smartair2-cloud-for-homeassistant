@@ -34,16 +34,65 @@
       "room_temperature": {
         "name": "Temperatura pokojowa"
       }
+    },
+    "climate": {
+      "haier_ac": {
+        "state_attributes": {
+          "swing_mode": {
+            "state": {
+              "auto": "Auto",
+              "top": "Góra",
+              "upper": "Wysoko",
+              "lower": "Nisko",
+              "bottom": "Dół",
+              "health_1": "Zdrowie 1",
+              "health_2": "Zdrowie 2"
+            }
+          },
+          "swing_horizontal_mode": {
+            "state": {
+              "auto": "Auto",
+              "center": "Środek",
+              "left": "Lewo",
+              "left_center": "Lewo-środek",
+              "right_center": "Prawo-środek",
+              "right": "Prawo"
+            }
+          }
+        }
+      }
+    },
+    "switch": {
+      "health": {
+        "name": "Zdrowie"
+      },
+      "display": {
+        "name": "Wyświetlacz"
+      },
+      "heat10": {
+        "name": "Ogrzewanie 10 °C"
+      }
+    },
+    "button": {
+      "self_clean": {
+        "name": "Samooczyszczanie"
+      }
+    },
+    "binary_sensor": {
+      "self_clean": {
+        "name": "Samooczyszczanie"
+      }
     }
   },
   "options": {
     "step": {
       "init": {
         "title": "Haier SmartAir2 — opcje",
-        "description": "Zmień region lub przypisanie urządzeń do lokalnego IP (format: MAC:IP, po przecinku). Puste = sterowanie przez chmurę.",
+        "description": "Zmień region lub przypisanie urządzeń do lokalnego IP (format: MAC:IP, po przecinku). Puste = sterowanie przez chmurę. Podaj adresy MAC jednostek V3, aby włączyć dodatkowe funkcje: nazwane pozycje żaluzji, zdrowie, wyświetlacz, ogrzewanie 10 °C i samooczyszczanie.",
         "data": {
           "region": "Region",
-          "local_ips": "Urządzenia lokalne (MAC:IP)"
+          "local_ips": "Urządzenia lokalne (MAC:IP)",
+          "v3_extras": "Dodatkowe funkcje V3 (MAC, po przecinku)"
         }
       }
     }

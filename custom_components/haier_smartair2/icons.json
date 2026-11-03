@@ -1,0 +1,35 @@
+{
+  "entity": {
+    "climate": {
+      "haier_ac": {
+        "state_attributes": {
+          "swing_mode": {
+            "default": "mdi:arrow-oscillating",
+            "state": {
+              "auto": "mdi:autorenew",
+              "top": "mdi:chevron-double-up",
+              "upper": "mdi:chevron-up",
+              "lower": "mdi:chevron-down",
+              "bottom": "mdi:chevron-double-down",
+              "health_1": "mdi:leaf",
+              "health_2": "mdi:leaf-circle-outline",
+              "on": "mdi:arrow-oscillating",
+              "off": "mdi:arrow-oscillating-off"
+            }
+          },
+          "swing_horizontal_mode": {
+            "default": "mdi:arrow-oscillating",
+            "state": {
+              "auto": "mdi:autorenew",
+              "center": "mdi:arrow-collapse-horizontal",
+              "left": "mdi:chevron-double-left",
+              "left_center": "mdi:chevron-left",
+              "right_center": "mdi:chevron-right",
+              "right": "mdi:chevron-double-right"
+            }
+          }
+        }
+      }
+    }
+  }
+}

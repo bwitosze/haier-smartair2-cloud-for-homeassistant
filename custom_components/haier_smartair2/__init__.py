@@ -17,10 +17,13 @@ from .const import (
     CONF_PASSWORD,
     CONF_REGION,
     CONF_USERNAME,
+    CONF_V3_EXTRAS,
     DEFAULT_REGION,
+    DOMAIN,
     PLATFORMS,
     REGIONS,
     generate_client_id,
+    parse_mac_list,
 )
 from .coordinator import HaierCoordinator
 from .local import HaierLocalClient
@@ -66,6 +69,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HaierConfigEntry) -> boo
     region = conf.get(CONF_REGION, DEFAULT_REGION)
     gateway = REGIONS.get(region, REGIONS[DEFAULT_REGION])
     local_map = _parse_local_map(conf.get(CONF_LOCAL_IPS))
+    v3_macs = parse_mac_list(conf.get(CONF_V3_EXTRAS))
 
     # per-installation gateway client id (migrate older entries that predate it)
     client_id = entry.data.get(CONF_CLIENT_ID)
@@ -97,6 +101,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HaierConfigEntry) -> boo
             continue
         name = dev.get("name") or devid
         codec = codec_for_type(dev.get("type"))
+        v3_extras = devid in v3_macs and codec.supports_v3_extras
         if devid in local_map:
             local = HaierLocalClient(hass, local_map[devid], devid)
             try:
@@ -107,14 +112,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: HaierConfigEntry) -> boo
                                 name, local_map[devid], err)
                 cloud.register_device(devid)
                 any_cloud = True
-                coord = HaierCoordinator(hass, cloud, codec, devid, name, via_cloud=True)
+                coord = HaierCoordinator(
+                    hass, cloud, codec, devid, name, via_cloud=True, v3_extras=v3_extras
+                )
             else:
                 data.local_clients.append(local)
-                coord = HaierCoordinator(hass, local, codec, devid, name, via_cloud=False)
+                coord = HaierCoordinator(
+                    hass, local, codec, devid, name, via_cloud=False, v3_extras=v3_extras
+                )
         else:
             cloud.register_device(devid)
             any_cloud = True
-            coord = HaierCoordinator(hass, cloud, codec, devid, name, via_cloud=True)
+            coord = HaierCoordinator(
+                hass, cloud, codec, devid, name, via_cloud=True, v3_extras=v3_extras
+            )
         data.coordinators.append(coord)
 
     if any_cloud:
