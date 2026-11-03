@@ -38,6 +38,7 @@ class HaierCoordinator(DataUpdateCoordinator[HaierState]):
         self.devid = devid.upper()
         self.dev_name = name
         self.via_cloud = via_cloud
+        self._last_logged_frame: bytes | None = None
         # push updates from the transport (device-initiated status frames)
         transport.add_listener(self._on_push)
 
@@ -45,6 +46,10 @@ class HaierCoordinator(DataUpdateCoordinator[HaierState]):
         frame = self.transport.latest_frame(self.devid)
         if not frame:
             return None
+        # _decode_latest runs up to 10x per poll; log only changes to keep the log readable
+        if frame != self._last_logged_frame:
+            _LOGGER.debug("status %s: %s", self.devid, frame.hex())
+            self._last_logged_frame = frame
         try:
             return self.codec.decode(frame)
         except Exception:  # noqa: BLE001
@@ -70,6 +75,7 @@ class HaierCoordinator(DataUpdateCoordinator[HaierState]):
         """Send a control command (read-modify-write) and refresh."""
         state = self.data or self._decode_latest() or HaierState()
         frame = self.codec.encode_set(state, **changes)
+        _LOGGER.debug("command %s %s: %s", self.devid, changes, frame.hex())
         await self.transport.async_send_frame(self.devid, frame)
         await asyncio.sleep(0.6)
         await self.async_request_refresh()
