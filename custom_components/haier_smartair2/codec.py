@@ -36,8 +36,9 @@ class HaierState:
     power: bool | None = None
     mode: int | None = None  # MODE_* constant
     fan: int | None = None  # FAN_* constant
-    quiet: bool | None = None  # 20200P super-silent (V2 only)
-    turbo: bool | None = None  # 20200O powerful/boost (V2 only)
+    quiet: bool | None = None  # super-silent: V2 20200P / V3 byte5 bit4
+    turbo: bool | None = None  # 20200O powerful/boost (V2 only — absent on V3)
+    swing_v: bool | None = None  # 20200I up/down louvre (V2 only)
     target_temp: float | None = None
     current_temp: float | None = None
     raw_block: bytes = b""  # the status data block, for read-modify-write
@@ -82,6 +83,8 @@ class Codec:
     extra_fan_modes: tuple[str, ...] = ()
     # whether fan-speed control is reliably calibrated for this device generation
     supports_fan: bool = True
+    # whether louvre (swing) control is calibrated for this device generation
+    supports_swing: bool = False
 
     def decode(self, frame: bytes) -> HaierState:  # pragma: no cover - interface
         raise NotImplementedError
@@ -93,11 +96,30 @@ class Codec:
 _QUIET_BIT = 1 << 2  # 20200P (word 10 bit 2)
 _TURBO_BIT = 1 << 1  # 20200O (word 10 bit 1)
 
+# Louvre/swing, straight from Haier's own device profile (docs/device-profiles/,
+# the typeIdentifier file shipped inside the uSDK assets):
+#   [上下]^20200I ... @1&4d22,2#6d01,8,0,1$   up/down    -> word 8 bit 0
+#   [左右]^20200J ... @1&4d23,2#6d01,8,1,1$   left/right -> word 8 bit 1
+# Addressable through the 4d5f group command (see the [组命令] line:
+# `20200I#2&8,0,1`), so no extra subcommand is needed — the block we already
+# build carries it.
+#
+# Only the up/down flag is wired up. The profile is generic for the whole device
+# family and also declares the left/right flag, but this unit has no horizontal
+# louvre — the control existed in HA and did nothing. Bit 1 is still preserved
+# untouched by the read-modify-write below, so nothing is clobbered.
+#
+# CAREFUL: the profile numbers words 1-based, this codec indexes 0-based, so
+# profile word 8 is `w[7]` here. The same shift already applies to mode (profile
+# 6 -> w[5]), fan (7 -> w[6]), flags (9 -> w[8]) and setpoint (12 -> w[11]).
+_SWING_V_BIT = 1 << 0  # 20200I up/down
+
 
 class CodecV2(Codec):
     """Salon-class device (word layout, 4d5f command). Verified via cloud."""
 
     extra_fan_modes = ("quiet", "turbo")
+    supports_swing = True
 
     def decode(self, frame: bytes) -> HaierState:
         _ftype, data = extract_block(frame)
@@ -110,6 +132,7 @@ class CodecV2(Codec):
             fan=w[6],
             quiet=bool(w[9] & _QUIET_BIT),
             turbo=bool(w[9] & _TURBO_BIT),
+            swing_v=bool(w[7] & _SWING_V_BIT),
             power=bool(w[8] & 0x01),
             target_temp=float(w[11] + 16),
             raw_block=bytes(data),
@@ -132,11 +155,14 @@ class CodecV2(Codec):
             w10 = (w10 | _QUIET_BIT) if changes["quiet"] else (w10 & ~_QUIET_BIT)
         if "turbo" in changes and changes["turbo"] is not None:
             w10 = (w10 | _TURBO_BIT) if changes["turbo"] else (w10 & ~_TURBO_BIT)
+        # swing lives in word 8; flip only bit 0, preserve every other bit
+        if "swing_v" in changes and changes["swing_v"] is not None:
+            w8 = (w8 | _SWING_V_BIT) if changes["swing_v"] else (w8 & ~_SWING_V_BIT)
         flags9 = 0x0001 if (power if power is not None else True) else 0x0000
         blk = bytearray(24)
         blk[10:12] = int(mode).to_bytes(2, "big")       # w6 mode
         blk[12:14] = int(fan).to_bytes(2, "big")        # w7 fan
-        blk[14:16] = int(w8).to_bytes(2, "big")         # w8 swing (preserved)
+        blk[14:16] = int(w8 & 0xFFFF).to_bytes(2, "big")  # w8 swing
         blk[16:18] = int(flags9).to_bytes(2, "big")     # w9 flags (power bit0)
         blk[18:20] = int(w10 & 0xFFFF).to_bytes(2, "big")  # w10 (quiet/turbo)
         blk[20:22] = int(w11).to_bytes(2, "big")
@@ -145,20 +171,32 @@ class CodecV2(Codec):
 
 
 # V3 (maks) mode = high nibble of status byte[2] (calibrated 2026-08-05):
-#   0x0=AUTO, 0x2=COOL, 0x4=DRY, 0x8=HEAT, 0xC=FAN. Low nibble = compressor/status noise.
+#   0x0=AUTO, 0x2=COOL, 0x4=DRY, 0x8=HEAT, 0xC=FAN.
 _V3_MODE_FROM_NIBBLE = {0x0: MODE_AUTO, 0x2: MODE_COOL, 0x4: MODE_DRY, 0x8: MODE_HEAT, 0xC: MODE_FAN}
 _V3_MODE_TO_NIBBLE = {v: k for k, v in _V3_MODE_FROM_NIBBLE.items()}
+
+# V3 fan speed = LOW nibble of the same status byte[2] (calibrated 2026-08-06 by
+# stepping the physical remote through all four speeds while polling every 3 s).
+# An earlier note put the fan on byte15 and dismissed this nibble as compressor
+# noise; that was wrong — byte1 and byte15 did not move at all across the sequence.
+_V3_FAN_FROM_NIBBLE = {0x1: FAN_HIGH, 0x2: FAN_MID, 0x3: FAN_LOW, 0x5: FAN_AUTO}
+_V3_FAN_TO_NIBBLE = {v: k for k, v in _V3_FAN_FROM_NIBBLE.items()}
+
+# V3 super-silent ("quiet") is a separate flag, not a speed — same split as V2's
+# 20200P. Turning it on makes the unit force the speed nibble back to AUTO by
+# itself, so quiet and an explicit speed are mutually exclusive on the device.
+_V3_QUIET_BIT = 0x10  # status byte[5] bit 4 (bit 0 of the same byte is power)
 
 
 class CodecV3(Codec):
     """Maks-class device (byte layout, 6001 command). Verified via local TCP.
 
     Calibrated: setpoint (byte0), power (byte5 bit0), current temp (byte10/2),
-    mode (byte2 high nibble). Fan speed (byte15) is NOT reliably calibrated yet,
-    so fan control is disabled for this generation to avoid misleading the user.
+    mode (byte2 high nibble), fan speed (byte2 low nibble), quiet (byte5 bit4).
+    No turbo/boost flag was found on this generation (the remote has no such key).
     """
 
-    supports_fan = False
+    extra_fan_modes = ("quiet",)
 
     def decode(self, frame: bytes) -> HaierState:
         _ftype, d = extract_block(frame)
@@ -170,6 +208,8 @@ class CodecV3(Codec):
         return HaierState(
             target_temp=float(d[0] + 16),
             mode=_V3_MODE_FROM_NIBBLE.get((d[2] >> 4) & 0x0F, MODE_AUTO),
+            fan=_V3_FAN_FROM_NIBBLE.get(d[2] & 0x0F),
+            quiet=bool(d[5] & _V3_QUIET_BIT),
             power=bool(d[5] & 0x01),
             current_temp=current,
             raw_block=bytes(d),
@@ -183,7 +223,16 @@ class CodecV3(Codec):
         if "mode" in changes and changes["mode"] is not None:
             nib = _V3_MODE_TO_NIBBLE.get(changes["mode"])
             if nib is not None:
-                block[2] = (nib << 4) | (block[2] & 0x0F)  # keep low-nibble status bits
+                block[2] = (nib << 4) | (block[2] & 0x0F)  # keep the fan nibble
+        if "fan" in changes and changes["fan"] is not None:
+            nib = _V3_FAN_TO_NIBBLE.get(changes["fan"])
+            if nib is not None:
+                block[2] = (block[2] & 0xF0) | nib  # keep the mode nibble
+        if "quiet" in changes and changes["quiet"] is not None:
+            if changes["quiet"]:
+                block[5] |= _V3_QUIET_BIT
+            else:
+                block[5] &= ~_V3_QUIET_BIT
         if "power" in changes and changes["power"] is not None:
             if changes["power"]:
                 block[5] |= 0x01

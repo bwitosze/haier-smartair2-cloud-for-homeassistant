@@ -45,7 +45,9 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def _insecure_ctx() -> ssl.SSLContext:
-    ctx = ssl.create_default_context()
+    # bare context: create_default_context() loads the CA store from disk, which is a
+    # blocking call in the event loop - and verification is disabled here anyway
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
     return ctx
@@ -223,7 +225,7 @@ class HaierCloudClient:
         loop = self._hass.loop
         self._refresh_unsub = loop.call_later(
             TOKEN_REFRESH_SECONDS,
-            lambda: self._hass.async_create_task(self._reconnect("token refresh")),
+            lambda: self._hass.async_create_background_task(self._reconnect("token refresh"), "haier_cloud_reconnect"),
         )
 
     async def _connect(self) -> None:
@@ -264,7 +266,7 @@ class HaierCloudClient:
         except Exception:  # noqa: BLE001
             _LOGGER.exception("reconnect failed; retrying in 30s")
             self._hass.loop.call_later(
-                30, lambda: self._hass.async_create_task(self._reconnect("retry"))
+                30, lambda: self._hass.async_create_background_task(self._reconnect("retry"), "haier_cloud_reconnect")
             )
         finally:
             self._reconnecting = False
@@ -297,7 +299,7 @@ class HaierCloudClient:
             return
         _LOGGER.info("Haier cloud disconnected rc=%s", reason_code)
         self._hass.loop.call_soon_threadsafe(
-            lambda: self._hass.async_create_task(self._reconnect("disconnect"))
+            lambda: self._hass.async_create_background_task(self._reconnect("disconnect"), "haier_cloud_reconnect")
         )
 
     def _on_message(self, client, userdata, msg) -> None:
@@ -307,7 +309,7 @@ class HaierCloudClient:
             return
         if payload.get("event") == "invalidToken":
             self._hass.loop.call_soon_threadsafe(
-                lambda: self._hass.async_create_task(self._reconnect("invalidToken"))
+                lambda: self._hass.async_create_background_task(self._reconnect("invalidToken"), "haier_cloud_reconnect")
             )
             return
         if payload.get("type") == "boundDevs" and payload.get("data"):

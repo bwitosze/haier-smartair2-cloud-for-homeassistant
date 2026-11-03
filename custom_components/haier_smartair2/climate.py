@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from homeassistant.components.climate import (
+    SWING_OFF,
+    SWING_ON,
     ClimateEntity,
     ClimateEntityFeature,
     HVACMode,
@@ -42,6 +44,11 @@ HVAC_TO_MODE = {v: k for k, v in MODE_TO_HVAC.items()}
 
 FAN_TO_HA = {FAN_AUTO: "auto", FAN_LOW: "low", FAN_MID: "medium", FAN_HIGH: "high"}
 HA_TO_FAN = {v: k for k, v in FAN_TO_HA.items()}
+
+# Vertical louvre only. Haier's device profile also defines a left/right flag
+# (20200J, word 8 bit 1), but this unit has no horizontal louvre to drive with it
+# — exposing it just added a control that never did anything. See codec.py.
+SWING_BOOL = [SWING_OFF, SWING_ON]
 
 
 async def async_setup_entry(
@@ -86,7 +93,8 @@ class HaierClimate(CoordinatorEntity[HaierCoordinator], ClimateEntity):
             model="SmartAir2 (cloud)" if coordinator.via_cloud else "SmartAir2 (local)",
         )
         # fan selector only when the codec reliably supports fan control
-        # (V2/salon: full; V3/maks: disabled until fan is calibrated locally)
+        # (V2: auto/quiet/low/medium/high/turbo; V3: same minus turbo, which this
+        # generation does not expose)
         if coordinator.codec.supports_fan:
             extras = coordinator.codec.extra_fan_modes
             modes = ["auto"]
@@ -97,6 +105,13 @@ class HaierClimate(CoordinatorEntity[HaierCoordinator], ClimateEntity):
                 modes.append("turbo")
             self._attr_fan_modes = modes
             self._attr_supported_features |= ClimateEntityFeature.FAN_MODE
+        # Swing selector only on generations where the louvre bits are known.
+        # V2 (salon) has them straight from Haier's device profile; V3 (maks) was
+        # never calibrated — and that unit's louvre is mechanically damaged, so it
+        # must stay unexposed rather than merely untested.
+        if coordinator.codec.supports_swing:
+            self._attr_swing_modes = SWING_BOOL
+            self._attr_supported_features |= ClimateEntityFeature.SWING_MODE
 
     @property
     def available(self) -> bool:
@@ -129,6 +144,18 @@ class HaierClimate(CoordinatorEntity[HaierCoordinator], ClimateEntity):
         if st.turbo:
             return "turbo"
         return FAN_TO_HA.get(st.fan)
+
+    @property
+    def swing_mode(self) -> str | None:
+        """Up/down louvre (20200I)."""
+        if self.coordinator.data is None or not self.coordinator.codec.supports_swing:
+            return None
+        return SWING_ON if self.coordinator.data.swing_v else SWING_OFF
+
+    async def async_set_swing_mode(self, swing_mode: str) -> None:
+        # deliberately no power=True: moving the louvre should not switch a
+        # sleeping unit on, unlike a temperature or mode change
+        await self.coordinator.async_apply(swing_v=swing_mode == SWING_ON)
 
     async def async_set_temperature(self, **kwargs) -> None:
         temp = kwargs.get(ATTR_TEMPERATURE)

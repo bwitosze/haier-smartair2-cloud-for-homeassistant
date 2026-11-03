@@ -7,7 +7,8 @@ SmartAir2 app, not hOn) via two transports, chosen per device:
            newer encrypted local protocol (local control impossible).
 * LOCAL  — direct TCP 56800, for older dongles that speak plaintext smartair2.
 
-Protocol details were reverse engineered; see H:/haier-smartair2/README.md.
+Protocol details were reverse engineered; see
+https://github.com/bwitosze/haier-smartair2-cloud-for-homeassistant
 """
 
 from __future__ import annotations
