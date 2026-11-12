@@ -20,7 +20,7 @@ picked per device for whatever works.
   - **Local** — direct TCP `56800`, for plaintext-dongle units (instant, no internet)
 - Fan selector with `auto / low / medium / high`, plus **quiet** (super-silent) on
   both generations and **turbo** on units that expose it (V2 only so far)
-- Vertical louvre (swing on/off) and Health (ionizer / UV-C) switch on V2 units
+- Vertical louvre (swing on/off) and Health (ionizer / UV-C) and Display (indoor LED light) switches on V2 units
 - Config UI: e-mail, password, region, and an optional per-device local IP mapping
 - Options flow to change region / local mapping without re-adding
 
@@ -28,7 +28,7 @@ picked per device for whatever works.
 
 | Generation | Example | Transport | Status |
 |---|---|---|---|
-| **V2** (`typeIdentifier` ≤ 32 chars) | wall units w/ encrypted dongle | Cloud | **Full** — target, mode, fan, quiet/turbo, swing (up/down), health, current temp |
+| **V2** (`typeIdentifier` ≤ 32 chars) | wall units w/ encrypted dongle | Cloud | **Full** — target, mode, fan, quiet/turbo, swing (up/down), health, display, current temp |
 | **V3** (`typeIdentifier` > 32 chars) | older plaintext dongle | Local | **Experimental** — target temp, power, mode, fan speed and quiet confirmed against the remote; no turbo on this generation. Calibrated on a single unit |
 
 If your V3 unit reports the wrong mode/fan, please open an issue with a status

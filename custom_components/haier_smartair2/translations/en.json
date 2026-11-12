@@ -38,6 +38,9 @@
     "switch": {
       "health": {
         "name": "Health"
+      },
+      "display": {
+        "name": "Display"
       }
     }
   },

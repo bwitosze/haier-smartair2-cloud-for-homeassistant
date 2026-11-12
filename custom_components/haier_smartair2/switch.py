@@ -1,4 +1,4 @@
-"""Switch platform for Haier SmartAir2 (Health mode)."""
+"""Switch platform for Haier SmartAir2 (Health mode and indoor LED display)."""
 
 from __future__ import annotations
 
@@ -19,11 +19,13 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: HaierConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up Haier SmartAir2 switches."""
-    async_add_entities(
-        HaierHealthSwitch(coord)
-        for coord in entry.runtime_data.coordinators
-        if coord.codec.supports_health
-    )
+    entities: list[SwitchEntity] = []
+    for coord in entry.runtime_data.coordinators:
+        if coord.codec.supports_health:
+            entities.append(HaierHealthSwitch(coord))
+        if coord.codec.supports_display:
+            entities.append(HaierDisplaySwitch(coord))
+    async_add_entities(entities)
 
 
 class HaierHealthSwitch(CoordinatorEntity[HaierCoordinator], SwitchEntity):
@@ -54,3 +56,33 @@ class HaierHealthSwitch(CoordinatorEntity[HaierCoordinator], SwitchEntity):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         await self.coordinator.async_apply(health=False)
+
+
+class HaierDisplaySwitch(CoordinatorEntity[HaierCoordinator], SwitchEntity):
+    """Indoor unit LED display (Light) switch for a Haier air conditioner."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "display"
+    _attr_name = "Display"
+    _attr_icon = "mdi:led-on"
+
+    def __init__(self, coordinator: HaierCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{DOMAIN}_{coordinator.devid}_display"
+        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, coordinator.devid)})
+
+    @property
+    def available(self) -> bool:
+        return super().available and self.coordinator.data is not None
+
+    @property
+    def is_on(self) -> bool | None:
+        if self.coordinator.data is None:
+            return None
+        return bool(self.coordinator.data.display)
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        await self.coordinator.async_apply(display=True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        await self.coordinator.async_apply(display=False)
