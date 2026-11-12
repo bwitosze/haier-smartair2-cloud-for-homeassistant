@@ -39,6 +39,7 @@ class HaierState:
     quiet: bool | None = None  # super-silent: V2 20200P / V3 byte5 bit4
     turbo: bool | None = None  # 20200O powerful/boost (V2 only — absent on V3)
     swing_v: bool | None = None  # 20200I up/down louvre (V2 only)
+    health: bool | None = None  # 202005/202006 health/ionizer mode (V2 only)
     target_temp: float | None = None
     current_temp: float | None = None
     raw_block: bytes = b""  # the status data block, for read-modify-write
@@ -85,6 +86,8 @@ class Codec:
     supports_fan: bool = True
     # whether louvre (swing) control is calibrated for this device generation
     supports_swing: bool = False
+    # whether health (UV/ionizer) control is calibrated for this device generation
+    supports_health: bool = False
 
     def decode(self, frame: bytes) -> HaierState:  # pragma: no cover - interface
         raise NotImplementedError
@@ -114,12 +117,20 @@ _TURBO_BIT = 1 << 1  # 20200O (word 10 bit 1)
 # 6 -> w[5]), fan (7 -> w[6]), flags (9 -> w[8]) and setpoint (12 -> w[11]).
 _SWING_V_BIT = 1 << 0  # 20200I up/down
 
+# Health (ionizer / UV-C), from the uSDK profile (00000000000000008080000000041410):
+#   [关康]^202005 ... @1&4d08,0#6d01,9,3,1$   health off -> subcmd 4d08, status word 9 bit 3
+#   [开康]^202006 ... @1&4d09,0#6d01,9,3,1$   health on  -> subcmd 4d09, status word 9 bit 3
+# Unlike swing, health must be toggled via its dedicated 0-byte subcommands (4d09/4d08)
+# rather than the 4d5f group command block.
+_HEALTH_BIT = 1 << 3  # 202005/202006 health (profile word 9 -> w[8] bit 3)
+
 
 class CodecV2(Codec):
     """Salon-class device (word layout, 4d5f command). Verified via cloud."""
 
     extra_fan_modes = ("quiet", "turbo")
     supports_swing = True
+    supports_health = True
 
     def decode(self, frame: bytes) -> HaierState:
         _ftype, data = extract_block(frame)
@@ -133,12 +144,17 @@ class CodecV2(Codec):
             quiet=bool(w[9] & _QUIET_BIT),
             turbo=bool(w[9] & _TURBO_BIT),
             swing_v=bool(w[7] & _SWING_V_BIT),
+            health=bool(w[8] & _HEALTH_BIT),
             power=bool(w[8] & 0x01),
             target_temp=float(w[11] + 16),
             raw_block=bytes(data),
         )
 
     def encode_set(self, state: HaierState, **changes) -> bytes:
+        if set(changes.keys()) == {"health"}:
+            subcmd = b"\x4d\x09" if changes["health"] else b"\x4d\x08"
+            return build_frame(0x01, subcmd, b"")
+
         mode = changes.get("mode", state.mode) or 0
         fan = changes.get("fan", state.fan) or 0
         target = changes.get("target_temp", state.target_temp) or 16
