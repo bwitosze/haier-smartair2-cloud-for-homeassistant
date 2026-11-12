@@ -16,7 +16,7 @@ from __future__ import annotations
 from homeassistant.const import Platform
 
 DOMAIN = "haier_smartair2"
-PLATFORMS = [Platform.CLIMATE, Platform.SENSOR]
+PLATFORMS = [Platform.CLIMATE, Platform.SENSOR, Platform.SWITCH]
 
 # --- config entry keys ---
 CONF_USERNAME = "username"

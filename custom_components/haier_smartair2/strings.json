@@ -34,6 +34,14 @@
       "room_temperature": {
         "name": "Room temperature"
       }
+    },
+    "switch": {
+      "health": {
+        "name": "Health"
+      },
+      "display": {
+        "name": "Display"
+      }
     }
   },
   "options": {

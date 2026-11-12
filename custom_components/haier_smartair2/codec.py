@@ -39,6 +39,8 @@ class HaierState:
     quiet: bool | None = None  # super-silent: V2 20200P / V3 byte5 bit4
     turbo: bool | None = None  # 20200O powerful/boost (V2 only — absent on V3)
     swing_v: bool | None = None  # 20200I up/down louvre (V2 only)
+    health: bool | None = None  # 202005/202006 health/ionizer mode (V2 only)
+    display: bool | None = None  # 20200S indoor unit LED display / light (V2 only)
     target_temp: float | None = None
     current_temp: float | None = None
     raw_block: bytes = b""  # the status data block, for read-modify-write
@@ -85,6 +87,10 @@ class Codec:
     supports_fan: bool = True
     # whether louvre (swing) control is calibrated for this device generation
     supports_swing: bool = False
+    # whether health (UV/ionizer) control is calibrated for this device generation
+    supports_health: bool = False
+    # whether indoor LED display (light) control is calibrated for this device generation
+    supports_display: bool = False
 
     def decode(self, frame: bytes) -> HaierState:  # pragma: no cover - interface
         raise NotImplementedError
@@ -114,12 +120,27 @@ _TURBO_BIT = 1 << 1  # 20200O (word 10 bit 1)
 # 6 -> w[5]), fan (7 -> w[6]), flags (9 -> w[8]) and setpoint (12 -> w[11]).
 _SWING_V_BIT = 1 << 0  # 20200I up/down
 
+# Health (ionizer / UV-C), from the uSDK profile (00000000000000008080000000041410):
+#   [关康]^202005 ... @1&4d08,0#6d01,9,3,1$   health off -> subcmd 4d08, status word 9 bit 3
+#   [开康]^202006 ... @1&4d09,0#6d01,9,3,1$   health on  -> subcmd 4d09, status word 9 bit 3
+# Unlike swing, health must be toggled via its dedicated 0-byte subcommands (4d09/4d08)
+# rather than the 4d5f group command block.
+_HEALTH_BIT = 1 << 3  # 202005/202006 health (profile word 9 -> w[8] bit 3)
+
+# Indoor unit LED display ("Light" button on remote), from the uSDK profile:
+#   [屏显设置]^20200S#2&302000:00,302001:01@!&!,!#6d01,10,5,1$
+# Addressable through the 4d5f group command (`20200S#2&10,5,1` -> word 10 bit 5).
+# Note: bit 5 is inverted ("display off" flag): 0 = display ON, 1 = display OFF.
+_DISPLAY_OFF_BIT = 1 << 5  # 20200S display off (profile word 10 -> w[9] bit 5)
+
 
 class CodecV2(Codec):
     """Salon-class device (word layout, 4d5f command). Verified via cloud."""
 
     extra_fan_modes = ("quiet", "turbo")
     supports_swing = True
+    supports_health = True
+    supports_display = True
 
     def decode(self, frame: bytes) -> HaierState:
         _ftype, data = extract_block(frame)
@@ -133,12 +154,18 @@ class CodecV2(Codec):
             quiet=bool(w[9] & _QUIET_BIT),
             turbo=bool(w[9] & _TURBO_BIT),
             swing_v=bool(w[7] & _SWING_V_BIT),
+            health=bool(w[8] & _HEALTH_BIT),
+            display=not bool(w[9] & _DISPLAY_OFF_BIT),
             power=bool(w[8] & 0x01),
             target_temp=float(w[11] + 16),
             raw_block=bytes(data),
         )
 
     def encode_set(self, state: HaierState, **changes) -> bytes:
+        if set(changes.keys()) == {"health"}:
+            subcmd = b"\x4d\x09" if changes["health"] else b"\x4d\x08"
+            return build_frame(0x01, subcmd, b"")
+
         mode = changes.get("mode", state.mode) or 0
         fan = changes.get("fan", state.fan) or 0
         target = changes.get("target_temp", state.target_temp) or 16
@@ -150,11 +177,13 @@ class CodecV2(Codec):
             w8 = int.from_bytes(src[14:16], "big")   # swing
             w10 = int.from_bytes(src[18:20], "big")  # fresh-air / turbo / quiet / display bits
             w11 = int.from_bytes(src[20:22], "big")
-        # quiet / turbo live in word 10; flip only their bits, preserve the rest
+        # quiet / turbo / display live in word 10; flip only their bits, preserve the rest
         if "quiet" in changes and changes["quiet"] is not None:
             w10 = (w10 | _QUIET_BIT) if changes["quiet"] else (w10 & ~_QUIET_BIT)
         if "turbo" in changes and changes["turbo"] is not None:
             w10 = (w10 | _TURBO_BIT) if changes["turbo"] else (w10 & ~_TURBO_BIT)
+        if "display" in changes and changes["display"] is not None:
+            w10 = (w10 & ~_DISPLAY_OFF_BIT) if changes["display"] else (w10 | _DISPLAY_OFF_BIT)
         # swing lives in word 8; flip only bit 0, preserve every other bit
         if "swing_v" in changes and changes["swing_v"] is not None:
             w8 = (w8 | _SWING_V_BIT) if changes["swing_v"] else (w8 & ~_SWING_V_BIT)

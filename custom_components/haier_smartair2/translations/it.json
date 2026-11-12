@@ -1,0 +1,59 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Haier SmartAir2",
+        "description": "Accedi con il tuo account SmartAir2 (Haier). Opzionalmente associa i dispositivi a un IP locale per il controllo diretto (formato: MAC:IP, separati da virgola).",
+        "data": {
+          "username": "E-mail",
+          "password": "Password",
+          "region": "Regione",
+          "local_ips": "Dispositivi locali (MAC:IP, opzionale)"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "E-mail o password non validi",
+      "cannot_connect": "Impossibile connettersi al cloud Haier"
+    },
+    "abort": {
+      "already_configured": "Questo account è già configurato"
+    }
+  },
+  "selector": {
+    "region": {
+      "options": {
+        "eu": "Europa",
+        "us": "USA",
+        "sg": "Asia (Singapore)"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "room_temperature": {
+        "name": "Temperatura ambiente"
+      }
+    },
+    "switch": {
+      "health": {
+        "name": "Health"
+      },
+      "display": {
+        "name": "Display"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opzioni Haier SmartAir2",
+        "description": "Cambia regione o associa i dispositivi a un IP locale (formato: MAC:IP, separati da virgola). Vuoto = controllo via cloud.",
+        "data": {
+          "region": "Regione",
+          "local_ips": "Dispositivi locali (MAC:IP)"
+        }
+      }
+    }
+  }
+}
